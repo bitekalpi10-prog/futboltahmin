@@ -3,6 +3,8 @@ from datetime import date, timedelta, datetime, timezone
 from pathlib import Path
 import requests
 import time
+API_CACHE = {}
+API_CACHE_SECONDS = 3600
 from flask import Flask, render_template, jsonify
 
 app = Flask(__name__)
