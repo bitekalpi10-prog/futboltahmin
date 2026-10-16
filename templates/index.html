@@ -56,6 +56,9 @@
   <div class="form-grid">
     <div>
       <b>{{ m.home }}</b>
+      <p>Son 5 maç: {{ m.home_stats.last5_wins }}G
+{{ m.home_stats.last5_draws }}B
+{{ m.home_stats.last5_losses }}M</p>
       <p>Son maç sayısı: {{ m.home_stats.count }}</p>
       <p>Galibiyet: {{ m.home_stats.wins }}</p>
       <p>Beraberlik: {{ m.home_stats.draws }}</p>
@@ -64,6 +67,9 @@
     </div>
     <div>
       <b>{{ m.away }}</b>
+      <p>Son 5 maç: {{ m.away_stats.last5_wins }}G
+{{ m.away_stats.last5_draws }}B
+{{ m.away_stats.last5_losses }}M</p>
       <p>Son maç sayısı: {{ m.away_stats.count }}</p>
       <p>Galibiyet: {{ m.away_stats.wins }}</p>
       <p>Beraberlik: {{ m.away_stats.draws }}</p>
