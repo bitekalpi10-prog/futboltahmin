@@ -19,14 +19,35 @@ LEAGUES = {
 }
 HEADERS = {"X-Auth-Token": API_TOKEN} if API_TOKEN else {}
 
+
 def api_get(path, params=None):
     if not API_TOKEN:
         raise RuntimeError("FOOTBALL_DATA_TOKEN ayarlanmamış. .env.example dosyasına bakın.")
-    response = requests.get(API_BASE + path, headers=HEADERS, params=params, timeout=25)
+
+    cache_key = (path, tuple(sorted((params or {}).items())))
+    now = time.time()
+
+    if cache_key in API_CACHE:
+        cached_data, cached_time = API_CACHE[cache_key]
+        if now - cached_time < API_CACHE_SECONDS:
+            return cached_data
+
+    response = requests.get(
+        API_BASE + path,
+        headers=HEADERS,
+        params=params,
+        timeout=25
+    )
+
     if response.status_code == 429:
         raise RuntimeError("API istek sınırına ulaşıldı. Bir süre sonra tekrar deneyin.")
+
     response.raise_for_status()
-    return response.json()
+    data = response.json()
+
+    API_CACHE[cache_key] = (data, now)
+    return data
+
 
 def poisson(k, lam):
     p = math.exp(-lam)
