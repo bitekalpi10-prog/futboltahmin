@@ -62,8 +62,9 @@ def team_stats(team_id, team_name, matches):
 def summarize(rows):
     if not rows:
         return {"count": 0, "gf": 0, "ga": 0, "avg_gf": 0, "avg_ga": 0,
-                "wins": 0, "draws": 0, "losses": 0, "over25": 0, "btts": 0, "over15": 0, "over35": 0, "clean_sheets": 0}
+                "wins": 0, "draws": 0, "losses": 0, "over25": 0, "btts": 0, "over15": 0, "over35": 0, "clean_sheets": 0, "last5_count": 0, "last5_wins": 0, "last5_draws": 0, "last5_losses": 0}
     n = len(rows)
+    last5 = rows[-5:]
     gf, ga = sum(x["gf"] for x in rows), sum(x["ga"] for x in rows)
     return {
         "count": n, "gf": gf, "ga": ga,
@@ -71,6 +72,10 @@ def summarize(rows):
         "wins": sum(x["result"] == "G" for x in rows),
         "draws": sum(x["result"] == "B" for x in rows),
         "losses": sum(x["result"] == "M" for x in rows),
+        "last5_count": len(last5),
+"last5_wins": sum(x["result"] == "G" for x in last5),
+"last5_draws": sum(x["result"] == "B" for x in last5),
+"last5_losses": sum(x["result"] == "M" for x in last5),
         "over25": round(sum(x["gf"] + x["ga"] >= 3 for x in rows) / n * 100),
         "btts": round(sum(x["gf"] > 0 and x["ga"] > 0 for x in rows) / n * 100),
         "over15": round(sum(x["gf"] + x["ga"] >= 2 for x in rows) / n * 100),
