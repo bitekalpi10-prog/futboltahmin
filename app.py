@@ -62,7 +62,7 @@ def team_stats(team_id, team_name, matches):
 def summarize(rows):
     if not rows:
         return {"count": 0, "gf": 0, "ga": 0, "avg_gf": 0, "avg_ga": 0,
-                "wins": 0, "draws": 0, "losses": 0, "over25": 0, "btts": 0}
+                "wins": 0, "draws": 0, "losses": 0, "over25": 0, "btts": 0, "over15": 0, "over35": 0, "clean_sheets": 0}
     n = len(rows)
     gf, ga = sum(x["gf"] for x in rows), sum(x["ga"] for x in rows)
     return {
@@ -73,6 +73,9 @@ def summarize(rows):
         "losses": sum(x["result"] == "M" for x in rows),
         "over25": round(sum(x["gf"] + x["ga"] >= 3 for x in rows) / n * 100),
         "btts": round(sum(x["gf"] > 0 and x["ga"] > 0 for x in rows) / n * 100),
+        "over15": round(sum(x["gf"] + x["ga"] >= 2 for x in rows) / n * 100),
+        "over35": round(sum(x["gf"] + x["ga"] >= 4 for x in rows) / n * 100),
+        "clean_sheets": round(sum(x["ga"] == 0 for x in rows) / n * 100),
     }
 
 def predict(home_stats, away_stats):
@@ -81,7 +84,7 @@ def predict(home_stats, away_stats):
     # Basit, açıklanabilir model. Ev/deplasman ayrımı daha sonra geliştirilebilir.
     lh = max(0.15, (home_stats["avg_gf"] + away_stats["avg_ga"]) / 2)
     la = max(0.15, (away_stats["avg_gf"] + home_stats["avg_ga"]) / 2)
-    p1 = px = p2 = under = btts = 0.0
+    p1 = px = p2 = under = btts = over15 = over35 = 0.0
     scores = []
     for i in range(8):
         for j in range(8):
@@ -90,6 +93,9 @@ def predict(home_stats, away_stats):
             elif i == j: px += p
             else: p2 += p
             if i + j <= 2: under += p
+            if i + j >= 2: over15 += p
+            if i + j >= 4: over35 += p
+   
             if i > 0 and j > 0: btts += p
             scores.append({"score": f"{i}-{j}", "probability": round(p * 100, 1)})
     total = p1 + px + p2
@@ -97,7 +103,7 @@ def predict(home_stats, away_stats):
     return {
         "home_win": round(p1 / total * 100), "draw": round(px / total * 100),
         "away_win": round(p2 / total * 100), "under25": round(under * 100),
-        "over25": round((1 - under) * 100), "btts_yes": round(btts * 100),
+        "over15": round(over15 * 100), "over25": round((1 - under) * 100), "over35": round(over35 * 100), "btts_yes": round(btts * 100),
         "expected_goals": round(lh + la, 2), "top_scores": scores[:3],
         "model": "Basit Poisson gol modeli; kesin sonuç garantisi değildir."
     }
