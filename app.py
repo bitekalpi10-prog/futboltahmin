@@ -2,6 +2,8 @@ import os, math, json
 from datetime import date, timedelta, datetime, timezone
 from pathlib import Path
 import requests
+import os
+from urllib.parse import quote
 import time
 API_CACHE = {}
 API_CACHE_SECONDS = 3600
@@ -21,7 +23,115 @@ LEAGUES = {
 }
 HEADERS = {"X-Auth-Token": API_TOKEN} if API_TOKEN else {}
 
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_SECRET_KEY = os.getenv("SUPABASE_SECRET_KEY", "")
 
+
+def supabase_request(method, table, params=None, payload=None):
+    if not SUPABASE_URL or not SUPABASE_SECRET_KEY:
+        raise RuntimeError("Supabase bağlantı ayarları eksik.")
+
+    url = f"{SUPABASE_URL}/rest/v1/{quote(table)}"
+    headers = {
+        "apikey": SUPABASE_SECRET_KEY,
+        "Authorization": f"Bearer {SUPABASE_SECRET_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=ignore-duplicates,return=representation",
+    }
+
+    response = requests.request(
+        method,
+        url,
+        headers=headers,
+        params=params,
+        json=payload,
+        timeout=20,
+    )
+    response.raise_for_status()
+
+    if response.status_code == 204 or not response.text:
+        return None
+
+    return response.json()
+    def archive_prediction(match):
+    prediction = match.get("prediction", {})
+
+    if not match.get("id") or prediction.get("error"):
+        return
+
+    payload = {
+        "match_id": str(match["id"]),
+        "league": match.get("league"),
+        "home_team": match.get("home") or "Bilinmeyen ev sahibi",
+        "away_team": match.get("away") or "Bilinmeyen deplasman",
+        "match_date": match.get("date"),
+        "over_15_probability": prediction.get("over15"),
+        "over_25_probability": prediction.get("over25"),
+        "over_35_probability": prediction.get("over35"),
+        "btts_probability": prediction.get("btts_yes"),
+    }
+
+    supabase_request(
+        "POST",
+        "prediction_archive",
+        params={"on_conflict": "match_id"},
+        payload=payload,
+    )
+    def update_archived_results(historical_by_league):
+    finished_matches = {}
+
+    for matches in historical_by_league.values():
+        for match in matches:
+            if match.get("status") == "FINISHED":
+                finished_matches[str(match.get("id"))] = match
+
+    archived = supabase_request(
+        "GET",
+        "prediction_archive",
+        params={
+            "match_finished": "eq.false",
+            "select": "*",
+        },
+    ) or []
+
+    for item in archived:
+        match = finished_matches.get(str(item["match_id"]))
+        if not match:
+            continue
+
+        score = match.get("score", {}).get("fullTime", {})
+        home_score = score.get("home")
+        away_score = score.get("away")
+
+        if home_score is None or away_score is None:
+            continue
+
+        goals = home_score + away_score
+        probabilities = [
+            item.get("over_15_probability"),
+            item.get("over_25_probability"),
+            item.get("over_35_probability"),
+            item.get("btts_probability"),
+        ]
+
+        if any(p is None for p in probabilities):
+            continue
+
+        supabase_request(
+            "PATCH",
+            "prediction_archive",
+            params={"match_id": f"eq.{item['match_id']}"},
+            payload={
+                "home_score": home_score,
+                "away_score": away_score,
+                "over_15_correct": (probabilities[0] >= 50) == (goals >= 2),
+                "over_25_correct": (probabilities[1] >= 50) == (goals >= 3),
+                "over_35_correct": (probabilities[2] >= 50) == (goals >= 4),
+                "btts_correct": (probabilities[3] >= 50)
+                    == (home_score > 0 and away_score > 0),
+                "match_finished": True,
+            },
+        )
 def api_get(path, params=None):
     if not API_TOKEN:
         raise RuntimeError("FOOTBALL_DATA_TOKEN ayarlanmamış. .env.example dosyasına bakın.")
@@ -160,6 +270,10 @@ def build_weekly_bulletin():
         except Exception as e:
             historical_by_league[code] = []
             errors.append(f"{league_name} geçmiş verisi: {str(e)}")
+                try:
+        update_archived_results(historical_by_league)
+    except Exception as e:
+        errors.append(f"Arşiv sonuç kontrolü: {str(e)}")
     output = []
     for m in sorted(all_matches, key=lambda x: x.get("utcDate", "")):
         code = m.get("competition", {}).get("code")
@@ -174,6 +288,11 @@ def build_weekly_bulletin():
             "home": home.get("name"), "away": away.get("name"),
             "home_stats": hs, "away_stats": aws, "prediction": pred,
         })
+            for match in output:
+        try:
+            archive_prediction(match)
+        except Exception as e:
+            errors.append(f"Arşiv kaydı ({match.get('id')}): {str(e)}")
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "range_start": today.isoformat(), "range_end": end.isoformat(),
